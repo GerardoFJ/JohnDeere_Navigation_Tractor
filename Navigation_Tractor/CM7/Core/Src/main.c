@@ -80,6 +80,38 @@ static void MX_I2C1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+//void ReadActualTime_Mem(uint8_t *hour, uint8_t *minutes, uint8_t *seconds,uint8_t *year, uint8_t *month, uint8_t *day ){
+//	uint8_t reg [6];
+//	reg[0] = 0x00;
+//	reg[1] = 0x01;
+//	reg[2] = 0x02;
+//	reg[3] = 0x04;
+//	reg[4] = 0x05;
+//	reg[5] = 0x06;
+//
+//	uint16_t devAddr = 0x68 << 1;  // 7-bit address shifted left
+//	uint8_t _seconds;
+//	uint8_t _minutes;
+//	uint8_t _hour;
+//	uint8_t _day;
+//	uint8_t _month;
+//	uint8_t _year;
+//
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[0],1, &_seconds, 1, 100);
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[1],1, &_minutes, 1, 100);
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[2],1, &_hour, 1, 100);
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[3],1, &_day, 1, 100);
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[4],1, &_month, 1, 100);
+//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[5],1, &_year, 1, 100);
+//
+//	*seconds = ((_seconds >> 4) * 10) + (_seconds & 0x0F);
+//	*minutes = ((_minutes >> 4) * 10) + (_minutes & 0x0F);
+//	*hour = ((_hour >> 4 ) * 10) + (_hour & 0x0F);
+//	*day = ((_day >> 4) * 10) + (_day & 0x0F);
+//	*month = ((_month >> 4) * 10) + (_month & 0x0F);
+//	*year = ((_year >> 4 ) * 10) + (_year & 0x0F);
+//}
+
 /* USER CODE END 0 */
 
 /**
@@ -154,6 +186,9 @@ Error_Handler();
   /* USER CODE BEGIN 2 */
   startHCrx(&huart2);
   startMotor(&htim14);
+  uint32_t vel;
+  uint32_t vel_last;
+  char * vel_str;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -163,6 +198,16 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  vel_str = HC05_GetData();
+	  vel = atoi(vel_str);
+	  if(vel_last != vel){
+		  sendHC("velocity: ");
+		  sendHC(vel_str);
+		  sendHC("\r\n");
+		  setMotorStep(vel);
+	  }
+	  vel_last = vel;
+
 
   }
   /* USER CODE END 3 */
