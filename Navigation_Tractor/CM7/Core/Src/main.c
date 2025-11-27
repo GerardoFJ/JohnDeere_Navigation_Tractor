@@ -25,6 +25,7 @@
 #include "hc05_module.h"
 #include "myprintf.h"
 #include "motor_controller.h"
+#include "Buzzer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,6 +59,7 @@
 
 FDCAN_HandleTypeDef hfdcan1;
 
+TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim13;
 TIM_HandleTypeDef htim14;
 
@@ -83,6 +85,7 @@ static void MX_TIM13_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_FDCAN1_Init(void);
+static void MX_TIM4_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -91,6 +94,28 @@ void StartDefaultTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
+    {
+        FDCAN_RxHeaderTypeDef rxHeader;
+        uint8_t rxData[8];
+
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK)
+        {
+            // error handling
+            return;
+        }
+        sendHC("Received can message: ");
+        sendHC("\r\n");
+        printf("ID: %d ", rxHeader.Identifier);
+        printf("Data: ");
+        for (int i = 0; i < rxHeader.DataLength; i++) {
+            printf("%d ", rxData[i]);
+        }
+        printf("\r\n");
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -163,12 +188,13 @@ Error_Handler();
   MX_TIM14_Init();
   MX_USART2_UART_Init();
   MX_FDCAN1_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   startHCrx(&huart2);
-  startMotor(&htim14);
-  uint32_t vel;
-  uint32_t vel_last;
-  char * vel_str;
+  startMotor(&htim13);
+  startBuzzer(&htim4);
+  setMotorStep(-115);
+  HAL_Delay(500);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -214,16 +240,6 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//	  vel_str = HC05_GetData();
-//	  vel = atoi(vel_str);
-//	  if(vel_last != vel){
-//		  sendHC("velocity: ");
-//		  sendHC(vel_str);
-//		  sendHC("\r\n");
-//		  setMotorStep(vel);
-//	  }
-//	  vel_last = vel;
-//	  printf("lolquemal \r\n");
 
 
   }
@@ -373,6 +389,55 @@ static void MX_FDCAN1_Init(void)
                 Error_Handler();
             }
   /* USER CODE END FDCAN1_Init 2 */
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 9;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 99;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
 
 }
 
@@ -653,10 +718,12 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  osDelay(1);
+  playTone(melody,durations,melodysize);
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+
   }
   /* USER CODE END 5 */
 }

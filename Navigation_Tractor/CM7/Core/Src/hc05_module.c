@@ -31,9 +31,25 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-void sendHC(char *data) {
-    if (data == NULL) return;
-    HAL_UART_Transmit(current_huart, (uint8_t*)data, strlen(data), HAL_MAX_DELAY);
+void sendHC(const char *format, ...) {
+    // 1. Create a buffer to hold the final formatted string
+    // Adjust size based on your needs (128 bytes is usually sufficient for debug lines)
+    char buffer[128];
+
+    // 2. Initialize the list of variable arguments
+    va_list args;
+    va_start(args, format);
+
+    // 3. Print formatted data into the buffer
+    // vsnprintf is safer than vsprintf because it prevents buffer overflow
+    vsnprintf(buffer, sizeof(buffer), format, args);
+
+    // 4. Clean up the argument list
+    va_end(args);
+
+    // 5. Transmit via UART
+    // We calculate the length of the formatted string inside the buffer
+    HAL_UART_Transmit(current_huart, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 }
 
 const char* HC05_GetData(void) {

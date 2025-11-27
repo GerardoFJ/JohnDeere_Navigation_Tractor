@@ -12,13 +12,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "main.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 
 #define BUFFER_SIZE 100
 
 void startHCrx(UART_HandleTypeDef *huart);
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
-void sendHC(char *data);
+void sendHC(const char *format, ...);
 const char* HC05_GetData(void);
 
 #endif /* INC_HC05_MODULE_H_ */

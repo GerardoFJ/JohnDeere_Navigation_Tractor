@@ -16,6 +16,6 @@
 #define INITIAL_STATE 1500
 
 void startMotor(TIM_HandleTypeDef *timnum);
-void setMotorStep(uint32_t step);
+void setMotorStep(int step);
 
 #endif /* INC_MOTOR_CONTROLLER_H_ */

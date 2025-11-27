@@ -12,6 +12,7 @@ void startMotor(TIM_HandleTypeDef *timnum) {
 
 }
 
-void setMotorStep(uint32_t step){
+void setMotorStep(int step){
+	step = step + 1615;
 	__HAL_TIM_SET_COMPARE(current_tim, TIM_CHANNEL_1, (uint32_t)step);
 }
