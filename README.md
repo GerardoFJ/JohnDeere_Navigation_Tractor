@@ -9,3 +9,13 @@ sudo ip link set slcan0 up
 ip -details link show slcan0
 candump slcan0
 '''
+
+Notes:
+
+ESC = 50hz 
+
+Clock = 200hz
+
+psc = 200-1
+
+

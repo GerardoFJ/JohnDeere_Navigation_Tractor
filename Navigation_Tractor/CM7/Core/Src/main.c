@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,19 +58,20 @@
 
 FDCAN_HandleTypeDef hfdcan1;
 
-I2C_HandleTypeDef hi2c1;
-
 TIM_HandleTypeDef htim13;
 TIM_HandleTypeDef htim14;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
+/* Definitions for defaultTask */
+osThreadId_t defaultTaskHandle;
+const osThreadAttr_t defaultTask_attributes = {
+  .name = "defaultTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* USER CODE BEGIN PV */
-FDCAN_TxHeaderTypeDef TxHeader;
-FDCAN_RxHeaderTypeDef RxHeader;
-uint8_t TxData[8] = {0x10, 0x34, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22};
-uint8_t RxData[8];
 
 /* USER CODE END PV */
 
@@ -80,45 +82,15 @@ static void MX_USART3_UART_Init(void);
 static void MX_TIM13_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_I2C1_Init(void);
 static void MX_FDCAN1_Init(void);
+void StartDefaultTask(void *argument);
+
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-//void ReadActualTime_Mem(uint8_t *hour, uint8_t *minutes, uint8_t *seconds,uint8_t *year, uint8_t *month, uint8_t *day ){
-//	uint8_t reg [6];
-//	reg[0] = 0x00;
-//	reg[1] = 0x01;
-//	reg[2] = 0x02;
-//	reg[3] = 0x04;
-//	reg[4] = 0x05;
-//	reg[5] = 0x06;
-//
-//	uint16_t devAddr = 0x68 << 1;  // 7-bit address shifted left
-//	uint8_t _seconds;
-//	uint8_t _minutes;
-//	uint8_t _hour;
-//	uint8_t _day;
-//	uint8_t _month;
-//	uint8_t _year;
-//
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[0],1, &_seconds, 1, 100);
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[1],1, &_minutes, 1, 100);
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[2],1, &_hour, 1, 100);
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[3],1, &_day, 1, 100);
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[4],1, &_month, 1, 100);
-//	HAL_I2C_Mem_Read(&hi2c1, devAddr, reg[5],1, &_year, 1, 100);
-//
-//	*seconds = ((_seconds >> 4) * 10) + (_seconds & 0x0F);
-//	*minutes = ((_minutes >> 4) * 10) + (_minutes & 0x0F);
-//	*hour = ((_hour >> 4 ) * 10) + (_hour & 0x0F);
-//	*day = ((_day >> 4) * 10) + (_day & 0x0F);
-//	*month = ((_month >> 4) * 10) + (_month & 0x0F);
-//	*year = ((_year >> 4 ) * 10) + (_year & 0x0F);
-//}
 
 /* USER CODE END 0 */
 
@@ -190,7 +162,6 @@ Error_Handler();
   MX_TIM13_Init();
   MX_TIM14_Init();
   MX_USART2_UART_Init();
-  MX_I2C1_Init();
   MX_FDCAN1_Init();
   /* USER CODE BEGIN 2 */
   startHCrx(&huart2);
@@ -199,6 +170,42 @@ Error_Handler();
   uint32_t vel_last;
   char * vel_str;
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of defaultTask */
+  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -217,10 +224,6 @@ Error_Handler();
 //	  }
 //	  vel_last = vel;
 //	  printf("lolquemal \r\n");
-//	  while (HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK);
-//	  	  	HAL_Delay(10);
-//	      	printf("CAN ID: %lx \n\r", RxHeader.Identifier);
-//	      	HAL_Delay(100);
 
 
   }
@@ -242,7 +245,7 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
@@ -255,7 +258,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 60;
+  RCC_OscInitStruct.PLL.PLLN = 50;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 8;
   RCC_OscInitStruct.PLL.PLLR = 2;
@@ -280,7 +283,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -306,19 +309,19 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
   hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
-  hfdcan1.Init.ProtocolException = ENABLE;
-  hfdcan1.Init.NominalPrescaler = 12;
-  hfdcan1.Init.NominalSyncJumpWidth = 8;
-  hfdcan1.Init.NominalTimeSeg1 = 15;
-  hfdcan1.Init.NominalTimeSeg2 = 4;
+  hfdcan1.Init.ProtocolException = DISABLE;
+  hfdcan1.Init.NominalPrescaler = 40;
+  hfdcan1.Init.NominalSyncJumpWidth = 1;
+  hfdcan1.Init.NominalTimeSeg1 = 3;
+  hfdcan1.Init.NominalTimeSeg2 = 1;
   hfdcan1.Init.DataPrescaler = 1;
   hfdcan1.Init.DataSyncJumpWidth = 1;
   hfdcan1.Init.DataTimeSeg1 = 1;
   hfdcan1.Init.DataTimeSeg2 = 1;
   hfdcan1.Init.MessageRAMOffset = 0;
-  hfdcan1.Init.StdFiltersNbr = 0;
+  hfdcan1.Init.StdFiltersNbr = 1;
   hfdcan1.Init.ExtFiltersNbr = 0;
-  hfdcan1.Init.RxFifo0ElmtsNbr = 0;
+  hfdcan1.Init.RxFifo0ElmtsNbr = 4;
   hfdcan1.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;
   hfdcan1.Init.RxFifo1ElmtsNbr = 0;
   hfdcan1.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_8;
@@ -326,77 +329,50 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.RxBufferSize = FDCAN_DATA_BYTES_8;
   hfdcan1.Init.TxEventsNbr = 0;
   hfdcan1.Init.TxBuffersNbr = 0;
-  hfdcan1.Init.TxFifoQueueElmtsNbr = 1;
+  hfdcan1.Init.TxFifoQueueElmtsNbr = 4;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   hfdcan1.Init.TxElmtSize = FDCAN_DATA_BYTES_8;
   if (HAL_FDCAN_Init(&hfdcan1) != HAL_OK)
   {
-	 printf("papio \r\n");
     Error_Handler();
   }
   /* USER CODE BEGIN FDCAN1_Init 2 */
-  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
-      /* Start Error */
-	  printf("papio \r\n");
-      Error_Handler();
-    }
+  FDCAN_FilterTypeDef sFilterConfig = {0};
 
-    /* Enable notification on new Rx messages (FIFO0) */
-    if (HAL_FDCAN_ActivateNotification(&hfdcan1,
-        FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
-    	printf("papio \r\n");
-      /* Notification Error */
-      Error_Handler();
-    }
+        // Accept all standard IDs into RX FIFO0
+        sFilterConfig.IdType = FDCAN_STANDARD_ID;
+        sFilterConfig.FilterIndex = 0;
+        sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
+        sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+        sFilterConfig.FilterID1 = 0x000;  // start ID
+        sFilterConfig.FilterID2 = 0x7FF;  // end ID
+
+        if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
+        {
+            Error_Handler();
+        }
+
+        // Optional: global filter for non-matching IDs
+        HAL_FDCAN_ConfigGlobalFilter(
+            &hfdcan1,
+            FDCAN_REJECT,
+            FDCAN_REJECT,
+            FDCAN_FILTER_REMOTE,
+            FDCAN_FILTER_REMOTE
+        );
+
+        if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
+        {
+            Error_Handler();
+        }
+        if (HAL_FDCAN_ActivateNotification(
+                    &hfdcan1,
+                    FDCAN_IT_RX_FIFO0_NEW_MESSAGE,
+                    0) != HAL_OK)
+            {
+                Error_Handler();
+            }
   /* USER CODE END FDCAN1_Init 2 */
-
-}
-
-/**
-  * @brief I2C1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C1_Init(void)
-{
-
-  /* USER CODE BEGIN I2C1_Init 0 */
-
-  /* USER CODE END I2C1_Init 0 */
-
-  /* USER CODE BEGIN I2C1_Init 1 */
-
-  /* USER CODE END I2C1_Init 1 */
-  hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x307075B1;
-  hi2c1.Init.OwnAddress1 = 0;
-  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c1.Init.OwnAddress2 = 0;
-  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
-  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Analogue filter
-  */
-  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Digital filter
-  */
-  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN I2C1_Init 2 */
-
-  /* USER CODE END I2C1_Init 2 */
 
 }
 
@@ -418,7 +394,7 @@ static void MX_TIM13_Init(void)
 
   /* USER CODE END TIM13_Init 1 */
   htim13.Instance = TIM13;
-  htim13.Init.Prescaler = 239;
+  htim13.Init.Prescaler = 199;
   htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim13.Init.Period = 19999;
   htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -464,7 +440,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 239;
+  htim14.Init.Prescaler = 199;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 19999;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -666,6 +642,24 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
