@@ -74,6 +74,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
+volatile uint8_t savedCommandByte = 0;
 
 /* USER CODE END PV */
 
@@ -106,14 +107,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
             // error handling
             return;
         }
-        sendHC("Received can message: ");
-        sendHC("\r\n");
-        printf("ID: %d ", rxHeader.Identifier);
-        printf("Data: ");
-        for (int i = 0; i < rxHeader.DataLength; i++) {
-            printf("%d ", rxData[i]);
-        }
-        printf("\r\n");
+        if (rxHeader.DataLength > 0){
+                    // 3. Save only the first byte
+                    savedCommandByte = rxData[0];
+
+         }
     }
 }
 
@@ -192,8 +190,9 @@ Error_Handler();
   /* USER CODE BEGIN 2 */
   startHCrx(&huart2);
   startMotor(&htim13);
+  startServo(&htim14);
   startBuzzer(&htim4);
-  setMotorStep(-115);
+  setMotorStep(0);
   HAL_Delay(500);
   /* USER CODE END 2 */
 
@@ -720,9 +719,23 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
   osDelay(1);
   playTone(melody,durations,melodysize);
+  setMotorStep(0);
+  osDelay(200);
   /* Infinite loop */
   for(;;)
   {
+	  setServo(0);
+	  osDelay(3000);
+	  setServo(411);
+	  osDelay(3000);
+	  setServo(206);
+	  osDelay(3000);
+	  setServo(0);
+	  osDelay(3000);
+	  setServo(-589);
+	  osDelay(3000);
+	  setServo(295);
+	  osDelay(3000);
 
   }
   /* USER CODE END 5 */
