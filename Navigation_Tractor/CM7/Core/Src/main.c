@@ -746,7 +746,6 @@ void CanRxTask(void *argument)
             	   | ((int32_t)frame.data[1] << 8)
             	   | ((int32_t)frame.data[2] << 16)
             	   | ((int32_t)frame.data[3] << 24);
-
                 TickType_t now = xTaskGetTickCount(); //get ticks
                 if (havePrev) { //check for prev tick count
                     TickType_t dtTicks = now - lastTimeTicks;   // Time difference
@@ -778,8 +777,8 @@ void CanRxTask(void *argument)
 void ControlTask(void *argument)
 {
 		TickType_t lastWake = xTaskGetTickCount();
-	    const TickType_t period = pdMS_TO_TICKS(10);
-	    const float dt = 1/CONTROL_FREQUENCY;
+		const float dt = (float)(1.0/CONTROL_FREQUENCY);
+	    const TickType_t period = pdMS_TO_TICKS((int)(dt * 1000));
 	    int goal_reached = 1;
 
 	    for (;;) {
@@ -820,16 +819,6 @@ void ControlTask(void *argument)
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END 5 */
-}
 
 /**
   * @brief  This function is executed in case of error occurrence.

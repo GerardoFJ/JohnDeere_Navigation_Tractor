@@ -34,7 +34,7 @@ void loop() {
        last_counter == counter;
        }
        if((millis()-prevTX) >= invlTX){
-       prevTX = millis();
+       prevTX = millis();  
        canSystem.send(messageID, 8, txData); // Send every 20 ms (50hz) can frame encoder message
        }
 }

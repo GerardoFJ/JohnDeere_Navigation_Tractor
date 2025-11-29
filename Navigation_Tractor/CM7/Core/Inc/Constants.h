@@ -11,7 +11,7 @@
 #define WHEEL_RADIUS_M      0.0314f   // 3.14cm radius
 #define TICKS_PER_REV       121       //TICKS_PER_REV
 //CONTROL CONSTANTS
-#define CONTROL_FREQUENCY 	100       //Control frequency hz
+#define CONTROL_FREQUENCY 	100.0f      //Control frequency hz
 #define TARGET_DISTANCE     1.0f	  //Target distance in Y in M
 #define KP_CONSTANT  		100		  //KP Constant for distance P control
 #define MAX_VEL  			100		  //Max vel (0 - 500) valid range
