@@ -7,6 +7,7 @@
 #define EncoderPin 13
 #define EncoderID 0x20
 #define BnoID 0x21
+#define CameraID 0x50
 
 namespace SystemConfig {
 
