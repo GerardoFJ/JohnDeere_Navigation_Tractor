@@ -25,6 +25,6 @@ void setMotorStep(int step){
 }
 
 void setServo(int step){
-	step = step + SERVO_STATE;
+	step = step;
 	__HAL_TIM_SET_COMPARE(current_tim_servo, TIM_CHANNEL_1, (uint32_t)step);
 }

@@ -1,23 +1,5 @@
 #ifndef CONSTANTS_H_
 #define CONSTANTS_H_
-//CAN CONSTANTS
-#define ENCODER_CAN_ID      0x20      //Encoder CAN ID
-#define BNO_CAN_ID      0x21      //Encoder CAN ID
-//PHYSICAL OFFSETS CONSTANTS
-#define INITIAL_STATE 1500
-#define SERVO_STATE 1589
-//BLUETOOTH CONSTANTS
-#define BUFFER_SIZE 100
-//ODOMETRY CONSTANTS
-#define WHEEL_RADIUS_M      0.0314f   // 3.14cm radius
-#define TICKS_PER_REV       121       //TICKS_PER_REV
-//CONTROL CONSTANTS
-#define CONTROL_FREQUENCY 	100.0f      //Control frequency hz
-#define TARGET_DISTANCE     1.0f	  //Target distance in Y in M
-#define KP_CONSTANT  		100		  //KP Constant for distance P control
-#define MAX_VEL  			100		  //Max vel (0 - 500) valid range
-#define MIN_VEL				70		  //Min vel (0 -500) valid range
-#define POSITION_TOLERANCE  0.01f  	  //Tolerance distance in M
 
 //STRUCTURS
 typedef struct {
@@ -35,5 +17,46 @@ typedef union {
     float float_val;
     uint8_t binary[4];
 } FloatConverter;
+
+typedef struct {
+    float x;
+    float y;
+    float theta;
+} Pose2D_t;
+
+typedef struct {
+    float v_cmd;      // m/s
+    float delta_cmd;  // rad
+} ControlCmd_t;
+
+typedef struct {
+    float x;
+    float y;
+} Waypoint;
+
+
+//CAN CONSTANTS
+#define ENCODER_CAN_ID      0x20      //Encoder CAN ID
+#define BNO_CAN_ID      0x21      //Encoder CAN ID
+//PHYSICAL OFFSETS CONSTANTS
+#define INITIAL_STATE 1500
+#define SERVO_STATE 1589
+//BLUETOOTH CONSTANTS
+#define BUFFER_SIZE 100
+//ODOMETRY CONSTANTS
+#define WHEEL_RADIUS_M      0.0314f   // 3.14cm radius
+#define TICKS_PER_REV       142       //TICKS_PER_REV
+//CONTROL CONSTANTS
+#define MAX_VEL  			500		  //Max vel (0 - 500) valid range
+
+
+#define LOOKAHEAD_DIST 0.2f          // meters (tune)
+#define WHEELBASE      0.1365f         // meters (measure your car)
+#define MAX_STEER_ANGLE (26.0f * (M_PI/180.0f))   // rad (±25 degrees)
+
+#define NUM_WP 3
+
+
+
 
 #endif
