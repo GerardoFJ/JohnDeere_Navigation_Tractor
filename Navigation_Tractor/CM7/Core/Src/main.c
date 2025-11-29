@@ -26,11 +26,21 @@
 #include "myprintf.h"
 #include "motor_controller.h"
 #include "Buzzer.h"
+#include "FreeRTOS.h"   // <- YOU must add this
+#include "queue.h"      // <- YOU must add this
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct {
+    uint32_t id;
+    uint8_t  data[8];
+} CanFrame_t;
 
+typedef struct {
+    float wheel_v_mps;    // wheel linear velocity [m/s]
+    int32_t last_ticks;   // last encoder count
+} OdomData_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -56,9 +66,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-volatile int32_t currentEncoderTicks = 0;
-int32_t startEncoderTicks = 0;
-int32_t targetEncoderTicks = 0;
 
 FDCAN_HandleTypeDef hfdcan1;
 
@@ -77,7 +84,40 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-volatile uint8_t savedCommandByte = 0;
+OdomData_t gOdom;
+#define ENCODER_CAN_ID      0x20      // CAN ID that carries encoder ticks
+#define WHEEL_RADIUS_M      0.0314f      // 5 cm radius
+#define TICKS_PER_REV       122       // encoder counts per revolution
+
+QueueHandle_t xCanRxQueue;
+
+float target_m = 1.0f;
+float traveled_m = 0.0f;
+int Kp = 100;      // tune this
+int v_max = 100;
+int v_min = 70;
+float pos_tol = 0.04f; // 1 cm
+
+float dt = 0.01f;                // 10 ms loop
+uint8_t move_active = 1;
+volatile int32_t encoder_ticks;
+
+osThreadId_t canRxTaskHandle;
+osThreadId_t controlTaskHandle;
+const osThreadAttr_t canRxTask_attributes = {
+  .name = "canRxTask",
+  .stack_size = 512 * 4,                   // 2 KB
+  .priority = (osPriority_t) osPriorityHigh,
+};
+
+const osThreadAttr_t controlTask_attributes = {
+  .name = "controlTask",
+  .stack_size = 512 * 4,                   // 2 KB
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
+
+
+
 
 /* USER CODE END PV */
 
@@ -93,45 +133,32 @@ static void MX_TIM4_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
+void CanRxTask(void *argument);
+void ControlTask(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* --- Calibration --- */
-
-#define TICKS_POR_VUELTA_LLANTA  160.0f
-#define DIAMETRO_LLANTA_CM       6.28f
-#define PI_VAL             3.14159265f
-#define PERIMETRO_LLANTA   (DIAMETRO_LLANTA_CM * PI_VAL)
-#define TICKS_PER_CM       (TICKS_POR_VUELTA_LLANTA / PERIMETRO_LLANTA)
-
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
-	// printf("ISR!\r\n");
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
     {
         FDCAN_RxHeaderTypeDef rxHeader;
         uint8_t rxData[8];
 
-        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) != HAL_OK)
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
         {
-            // error handling
-            return;
-        }
-        if (rxHeader.DataLength >= 4){
-          currentEncoderTicks = (int32_t)(rxData[0] | (rxData[1] << 8) | (rxData[2] << 16) | (rxData[3] << 24));
-        	uint32_t tempVal = (uint32_t)rxData[0] |
-							   ((uint32_t)rxData[1] << 8) |
-							   ((uint32_t)rxData[2] << 16) |
-							   ((uint32_t)rxData[3] << 24);
+        	CanFrame_t frame;
+        	frame.id  = rxHeader.Identifier;
+        	memcpy(frame.data, rxData, 8);
+        	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        	xQueueSendToBackFromISR(xCanRxQueue, &frame, &xHigherPriorityTaskWoken);
+        	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
-          currentEncoderTicks = (int32_t)tempVal;
-          // printf("ISR RAW: %02X %02X %02X %02X -> %ld\r\n",
-          rxData[0], rxData[1], rxData[2], rxData[3], currentEncoderTicks);
-         }
+        }
+        }
     }
-}
 
 /* USER CODE END 0 */
 
@@ -194,7 +221,6 @@ Error_Handler();
 /* USER CODE END Boot_Mode_Sequence_2 */
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -235,9 +261,20 @@ Error_Handler();
 
   /* Create the thread(s) */
   /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
 
   /* USER CODE BEGIN RTOS_THREADS */
+  xCanRxQueue = xQueueCreate(32, sizeof(CanFrame_t));
+  if (HAL_FDCAN_ActivateNotification(
+                      &hfdcan1,
+                      FDCAN_IT_RX_FIFO0_NEW_MESSAGE,
+                      0) != HAL_OK)
+              {
+                  Error_Handler();
+              }
+  canRxTaskHandle = osThreadNew(CanRxTask, NULL, &canRxTask_attributes);
+  controlTaskHandle = osThreadNew(ControlTask, NULL, &controlTask_attributes);
+
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
@@ -398,13 +435,7 @@ static void MX_FDCAN1_Init(void)
         {
             Error_Handler();
         }
-        if (HAL_FDCAN_ActivateNotification(
-                    &hfdcan1,
-                    FDCAN_IT_RX_FIFO0_NEW_MESSAGE,
-                    0) != HAL_OK)
-            {
-                Error_Handler();
-            }
+
   /* USER CODE END FDCAN1_Init 2 */
 
 }
@@ -722,6 +753,90 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void CanRxTask(void *argument)
+{
+	CanFrame_t frame;
+	TickType_t lastTimeTicks = 0;
+	int32_t    lastTicks     = 0;
+    uint8_t    havePrev     = 0;
+	const float R = WHEEL_RADIUS_M;
+	const float ticksPerRev = (float)TICKS_PER_REV;
+    for(;;)
+    {
+        if (xQueueReceive(xCanRxQueue, &frame, portMAX_DELAY) == pdTRUE) {
+
+            // Check if this frame is the one that carries encoder ticks
+            if (frame.id == ENCODER_CAN_ID) {
+
+            	int32_t ticks =
+            	   ((int32_t)frame.data[0] << 0)
+            	   | ((int32_t)frame.data[1] << 8)
+            	   | ((int32_t)frame.data[2] << 16)
+            	   | ((int32_t)frame.data[3] << 24);
+//            	printf("ticks = %d \r\n",ticks);
+                TickType_t now = xTaskGetTickCount();
+                if (havePrev) {
+                    TickType_t dtTicks = now - lastTimeTicks;
+
+                    if (dtTicks > 0) {
+                        float dt = (float)dtTicks / (float)configTICK_RATE_HZ; // seconds
+
+                        int32_t dTicks = ticks - lastTicks;
+                        float rev      = (float)dTicks / ticksPerRev;
+                        float wheelDist = (2.0f * (float)M_PI * R) * rev; // meters
+                        float v        = wheelDist / dt;                  // m/s
+
+                        // Update shared odometry state
+                        gOdom.wheel_v_mps = v;
+                        gOdom.last_ticks  = ticks;
+                    }
+                } else {
+                    // First sample – we don't have a previous value yet
+                    havePrev = 1;
+                }
+
+                lastTicks     = ticks;
+                lastTimeTicks = now;
+            }
+
+            // You can decode more CAN IDs here (commands, sensors, etc.)
+        }
+    }
+}
+
+void ControlTask(void *argument)
+{
+		TickType_t lastWake = xTaskGetTickCount();
+	    const TickType_t period = pdMS_TO_TICKS(10);
+	    const float dt = 0.01f;
+
+	    for (;;) {
+	        vTaskDelayUntil(&lastWake, period);
+
+	        float v_meas = gOdom.wheel_v_mps;
+	        traveled_m += v_meas * dt;
+
+	        float error = target_m - traveled_m;
+
+	        if (fabsf(error) <= pos_tol) {
+	        	setMotorStep(0);
+	            continue;
+	        }
+
+	        int v_cmd = Kp * error;
+
+	        // limit
+	        int sign = (v_cmd >= 0) ? 1 : 0;
+	        v_cmd = fabsf(v_cmd);
+	        if (v_cmd > v_max) v_cmd = v_max;
+	        if (v_cmd < v_min) v_cmd = v_min;
+	        v_cmd *= sign;
+//	        sendHC("Velocidad = %d \r\n", v_cmd);
+
+	        setMotorStep(v_cmd);
+	    }
+	}
+
 
 /* USER CODE END 4 */
 
@@ -735,31 +850,11 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  osDelay(1);
-  playTone(melody,durations,melodysize);
-
-  // --- MOVEMENT CONFIG ---
-  float distancia_deseada_cm = 100.0f;
-  int32_t ticks_objetivo = (int32_t)(distancia_deseada_cm * TICKS_PER_CM);
-  startEncoderTicks = currentEncoderTicks;
-  targetEncoderTicks = startEncoderTicks + ticks_objetivo;
-
+  /* Infinite loop */
   for(;;)
-    {
-	  	int32_t error = targetEncoderTicks - currentEncoderTicks;
-
-      if (error > 20)
-      {
-        if (error > (20 * TICKS_PER_CM)) setMotorStep(120);
-        else setMotorStep(80);
-      }
-      else
-      {
-        setMotorStep(0);
-      }
-
-		  osDelay(20);
-    }
+  {
+    osDelay(1);
+  }
   /* USER CODE END 5 */
 }
 
