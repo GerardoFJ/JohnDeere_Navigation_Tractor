@@ -35,6 +35,7 @@ void loop() {
        }
        if((millis()-prevTX) >= invlTX){
        prevTX = millis();
+       Serial.print("Sending CanMessage");
        canSystem.send(messageID, 8, txData);
        }
 }

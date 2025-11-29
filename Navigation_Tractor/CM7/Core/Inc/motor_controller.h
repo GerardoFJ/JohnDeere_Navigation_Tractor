@@ -12,9 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "main.h"
-
-#define INITIAL_STATE 1500
-#define SERVO_STATE 1589
+#include "Constants.h"
 
 void startMotor(TIM_HandleTypeDef *timnum);
 void setMotorStep(int step);

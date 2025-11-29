@@ -26,21 +26,13 @@
 #include "myprintf.h"
 #include "motor_controller.h"
 #include "Buzzer.h"
-#include "FreeRTOS.h"   // <- YOU must add this
-#include "queue.h"      // <- YOU must add this
+#include "FreeRTOS.h"
+#include "queue.h"
+#include "Constants.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct {
-    uint32_t id;
-    uint8_t  data[8];
-} CanFrame_t;
-
-typedef struct {
-    float wheel_v_mps;    // wheel linear velocity [m/s]
-    int32_t last_ticks;   // last encoder count
-} OdomData_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -77,47 +69,31 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* USER CODE BEGIN PV */
+//CONTROL DECLARATION
 OdomData_t gOdom;
-#define ENCODER_CAN_ID      0x20      // CAN ID that carries encoder ticks
-#define WHEEL_RADIUS_M      0.0314f      // 5 cm radius
-#define TICKS_PER_REV       122       // encoder counts per revolution
-
-QueueHandle_t xCanRxQueue;
-
-float target_m = 1.0f;
+float target_m = TARGET_DISTANCE;
 float traveled_m = 0.0f;
-int Kp = 100;      // tune this
-int v_max = 100;
-int v_min = 70;
-float pos_tol = 0.04f; // 1 cm
-
-float dt = 0.01f;                // 10 ms loop
-uint8_t move_active = 1;
-volatile int32_t encoder_ticks;
-
+int Kp = KP_CONSTANT;
+int v_max = MAX_VEL;
+int v_min = MIN_VEL;
+float pos_tol = POSITION_TOLERANCE;
+//RTOS QUEUES AND TASK DECLARATION
+QueueHandle_t xCanRxQueue;
 osThreadId_t canRxTaskHandle;
 osThreadId_t controlTaskHandle;
+
 const osThreadAttr_t canRxTask_attributes = {
   .name = "canRxTask",
-  .stack_size = 512 * 4,                   // 2 KB
+  .stack_size = 512 * 4,                   // 2 KB of stack
   .priority = (osPriority_t) osPriorityHigh,
 };
 
 const osThreadAttr_t controlTask_attributes = {
   .name = "controlTask",
-  .stack_size = 512 * 4,                   // 2 KB
+  .stack_size = 512 * 4,                   // 2 KB of stack
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
-
-
-
 
 /* USER CODE END PV */
 
@@ -143,18 +119,18 @@ void ControlTask(void *argument);
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
-    {
+    {   //Received new message in interruption
         FDCAN_RxHeaderTypeDef rxHeader;
         uint8_t rxData[8];
-
+        //Check new message is a valid can message
         if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
         {
-        	CanFrame_t frame;
-        	frame.id  = rxHeader.Identifier;
-        	memcpy(frame.data, rxData, 8);
+        	CanFrame_t frame;   //Create a frame message with our struct
+        	frame.id  = rxHeader.Identifier; //Set can ID
+        	memcpy(frame.data, rxData, 8); 	 //Copy data to frame data
         	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        	xQueueSendToBackFromISR(xCanRxQueue, &frame, &xHigherPriorityTaskWoken);
-        	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        	xQueueSendToBackFromISR(xCanRxQueue, &frame, &xHigherPriorityTaskWoken); //Send to queue back
+        	portYIELD_FROM_ISR(xHigherPriorityTaskWoken); //return to high priority task
 
         }
         }
@@ -232,6 +208,7 @@ Error_Handler();
   MX_FDCAN1_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+  //START ALL INTERFACES
   startHCrx(&huart2);
   startMotor(&htim13);
   startServo(&htim14);
@@ -264,14 +241,11 @@ Error_Handler();
 
 
   /* USER CODE BEGIN RTOS_THREADS */
+  //QUEUE, INTERRUPT AND TASK INITIALIZATION
   xCanRxQueue = xQueueCreate(32, sizeof(CanFrame_t));
-  if (HAL_FDCAN_ActivateNotification(
-                      &hfdcan1,
-                      FDCAN_IT_RX_FIFO0_NEW_MESSAGE,
-                      0) != HAL_OK)
-              {
-                  Error_Handler();
-              }
+  if (HAL_FDCAN_ActivateNotification(&hfdcan1,FDCAN_IT_RX_FIFO0_NEW_MESSAGE,0) != HAL_OK){
+	  Error_Handler();
+  }
   canRxTaskHandle = osThreadNew(CanRxTask, NULL, &canRxTask_attributes);
   controlTaskHandle = osThreadNew(ControlTask, NULL, &controlTask_attributes);
 
@@ -764,25 +738,24 @@ void CanRxTask(void *argument)
     for(;;)
     {
         if (xQueueReceive(xCanRxQueue, &frame, portMAX_DELAY) == pdTRUE) {
-
-            // Check if this frame is the one that carries encoder ticks
+            // Check for encoder ID
             if (frame.id == ENCODER_CAN_ID) {
 
-            	int32_t ticks =
+            	int32_t ticks =  //reconstruct encoder message
             	   ((int32_t)frame.data[0] << 0)
             	   | ((int32_t)frame.data[1] << 8)
             	   | ((int32_t)frame.data[2] << 16)
             	   | ((int32_t)frame.data[3] << 24);
-//            	printf("ticks = %d \r\n",ticks);
-                TickType_t now = xTaskGetTickCount();
-                if (havePrev) {
-                    TickType_t dtTicks = now - lastTimeTicks;
+
+                TickType_t now = xTaskGetTickCount(); //get ticks
+                if (havePrev) { //check for prev tick count
+                    TickType_t dtTicks = now - lastTimeTicks;   // Time difference
 
                     if (dtTicks > 0) {
                         float dt = (float)dtTicks / (float)configTICK_RATE_HZ; // seconds
 
-                        int32_t dTicks = ticks - lastTicks;
-                        float rev      = (float)dTicks / ticksPerRev;
+                        int32_t dTicks = ticks - lastTicks; //tick difference
+                        float rev      = (float)dTicks / ticksPerRev; //revolutions
                         float wheelDist = (2.0f * (float)M_PI * R) * rev; // meters
                         float v        = wheelDist / dt;                  // m/s
 
@@ -791,15 +764,13 @@ void CanRxTask(void *argument)
                         gOdom.last_ticks  = ticks;
                     }
                 } else {
-                    // First sample – we don't have a previous value yet
+                    // if theres only one sample
                     havePrev = 1;
                 }
-
-                lastTicks     = ticks;
+                lastTicks     = ticks; //update ticks and time
                 lastTimeTicks = now;
             }
 
-            // You can decode more CAN IDs here (commands, sensors, etc.)
         }
     }
 }
@@ -808,32 +779,34 @@ void ControlTask(void *argument)
 {
 		TickType_t lastWake = xTaskGetTickCount();
 	    const TickType_t period = pdMS_TO_TICKS(10);
-	    const float dt = 0.01f;
+	    const float dt = 1/CONTROL_FREQUENCY;
+	    int goal_reached = 1;
 
 	    for (;;) {
-	        vTaskDelayUntil(&lastWake, period);
+	        vTaskDelayUntil(&lastWake, period); //wait so the control be runing in x hz
 
-	        float v_meas = gOdom.wheel_v_mps;
-	        traveled_m += v_meas * dt;
+	        float v_meas = gOdom.wheel_v_mps; //get shared odom data
+	        traveled_m += v_meas * dt;  //calculate position
 
-	        float error = target_m - traveled_m;
+	        float error = target_m - traveled_m; //Calculate error for P control
 
-	        if (fabsf(error) <= pos_tol) {
-	        	setMotorStep(0);
-	            continue;
+	        if (fabsf(error) <= pos_tol && goal_reached == 1) { //Check if is on tolerate distance
+	        	setMotorStep(-1);  //stop motor
+	        	playTone(melody,durations,melodysize); // Play end melody buzzer
+	        	sendHC("Goal Reached Position = Position X = 0.0 Y = %.3f", traveled_m); // print information in bluetooth
+	        	goal_reached = 0;
 	        }
-
+	        else if(goal_reached != 0){
+	        //Continous p control
 	        int v_cmd = Kp * error;
-
-	        // limit
-	        int sign = (v_cmd >= 0) ? 1 : 0;
+	        int sign = (v_cmd >= 0) ? 1 : -1; //set velocity state
 	        v_cmd = fabsf(v_cmd);
-	        if (v_cmd > v_max) v_cmd = v_max;
+	        if (v_cmd > v_max) v_cmd = v_max; //set maximum and minimum velocities
 	        if (v_cmd < v_min) v_cmd = v_min;
-	        v_cmd *= sign;
-//	        sendHC("Velocidad = %d \r\n", v_cmd);
-
-	        setMotorStep(v_cmd);
+	        v_cmd *= sign; //change velocity
+	        sendHC("Velocity = %d Position X = 0.0 Y = %.3f \r\n", v_cmd, traveled_m); //Send information in bluetooth
+	        setMotorStep(v_cmd); //Send motor speed
+	        }
 	    }
 	}
 

@@ -14,9 +14,7 @@
 #include "main.h"
 #include <stdarg.h>
 #include <stdio.h>
-
-
-#define BUFFER_SIZE 100
+#include "Constants.h"
 
 void startHCrx(UART_HandleTypeDef *huart);
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
