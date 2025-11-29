@@ -1,7 +1,10 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#include <Arduino.h> // Main library
+#include <Arduino.h> // main arduino lib
+
+//Encoder pin
+#define EncoderPin 13
 
 namespace SystemConfig {
 
@@ -11,6 +14,7 @@ namespace SystemConfig {
   constexpr int SPI_SCK  = 18; 
   constexpr int SPI_MISO = 19; 
   constexpr int SPI_MOSI = 23;
+  
   
 }
 

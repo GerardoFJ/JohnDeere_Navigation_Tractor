@@ -19,7 +19,7 @@ class CanSender {
     int canSck;
 
   public:
-    CanSender();
+    CanSender(); // constructor
     CanSender(int baudRate,
                int frequency,
                int mode,
@@ -29,8 +29,8 @@ class CanSender {
                int canSck,
                int csPin);
   
-   bool begin();
+   bool begin(); //can initialize
 
-   bool send(unsigned long canId, byte length, byte* data);
+   bool send(unsigned long canId, byte length, byte* data); // can send
 };
 #endif

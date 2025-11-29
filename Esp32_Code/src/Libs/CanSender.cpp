@@ -35,17 +35,17 @@ CanSender::CanSender(
           csPin(csPin) { }
 
 bool CanSender::begin() {
-      SPI.begin(canSck,canMiso , canMosi, csPin); 
-      pinMode(canInt, INPUT); 
-      if (canBus.begin(MCP_ANY, baudRate, frequency) == CAN_OK) {
-        canBus.setMode(mode);
+      SPI.begin(canSck,canMiso , canMosi, csPin);  //SPI initialization
+      pinMode(canInt, INPUT);  // Pinout can initialization
+      if (canBus.begin(MCP_ANY, baudRate, frequency) == CAN_OK) { //Can actiavte
+        canBus.setMode(mode); //Can mode setup
         return true;
       } 
       return false;
     }
 
 bool CanSender::send(unsigned long canId, byte length, byte* data) {
-      byte sndStat = canBus.sendMsgBuf(canId, 0, length, data);
+      byte sndStat = canBus.sendMsgBuf(canId, 0, length, data); //can sending data
       if (sndStat == CAN_OK) {
         return true;
       } else {
