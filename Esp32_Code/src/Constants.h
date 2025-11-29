@@ -5,6 +5,8 @@
 
 //Encoder pin
 #define EncoderPin 13
+#define EncoderID 0x20
+#define BnoID 0x21
 
 namespace SystemConfig {
 
@@ -14,7 +16,6 @@ namespace SystemConfig {
   constexpr int SPI_SCK  = 18; 
   constexpr int SPI_MISO = 19; 
   constexpr int SPI_MOSI = 23;
-  
   
 }
 

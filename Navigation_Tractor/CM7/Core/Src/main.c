@@ -769,6 +769,17 @@ void CanRxTask(void *argument)
                 lastTicks     = ticks; //update ticks and time
                 lastTimeTicks = now;
             }
+            if (frame.id == BNO_CAN_ID){
+            	FloatConverter converter;
+            	// Fill the binary array directly from the CAN frame
+            	converter.binary[0] = frame.data[0];
+            	converter.binary[1] = frame.data[1];
+            	converter.binary[2] = frame.data[2];
+            	converter.binary[3] = frame.data[3];
+
+            	// Read it back as a float automatically
+            	gOdom.yaw_val = converter.float_val;
+            }
 
         }
     }

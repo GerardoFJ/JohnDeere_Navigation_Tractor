@@ -2,6 +2,7 @@
 #define CONSTANTS_H_
 //CAN CONSTANTS
 #define ENCODER_CAN_ID      0x20      //Encoder CAN ID
+#define BNO_CAN_ID      0x21      //Encoder CAN ID
 //PHYSICAL OFFSETS CONSTANTS
 #define INITIAL_STATE 1500
 #define SERVO_STATE 1589
@@ -26,7 +27,13 @@ typedef struct {
 
 typedef struct {
     float wheel_v_mps;    // wheel linear velocity [m/s]
+    float yaw_val; 		  // angular yaw data [radians]
     int32_t last_ticks;   // last encoder count
 } OdomData_t;
+
+typedef union {
+    float float_val;
+    uint8_t binary[4];
+} FloatConverter;
 
 #endif

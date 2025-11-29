@@ -29,6 +29,9 @@ void setup() //This code is executed once
   BNO_Init(&myBNO); //Assigning the structure to hold information about the device
 
   //Configuration to NDoF mode
+  bno055_set_reset_sys(1);
+  delay(1);
+  bno055_set_reset_sys(0);
   bno055_set_operation_mode(OPERATION_MODE_NDOF);
 
   delay(1);
@@ -60,12 +63,12 @@ void loop() //This code is looped forever
 
     Serial.println();					//Extra line to differentiate between packets
   }
-//   if((millis() - test_time) >= 5000){
-//     test_time = millis();
-//     bno055_set_reset_sys(1);
-//     delay(1);
-//     bno055_set_reset_sys(0);
-//     bno055_set_operation_mode(OPERATION_MODE_NDOF);
-//   }
+  if((millis() - test_time) >= 5000){
+    test_time = millis();
+    bno055_set_reset_sys(1);
+    delay(1);
+    bno055_set_reset_sys(0);
+    bno055_set_operation_mode(OPERATION_MODE_NDOF);
+  }
   
 }
