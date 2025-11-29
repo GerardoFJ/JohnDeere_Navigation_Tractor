@@ -72,26 +72,36 @@ UART_HandleTypeDef huart3;
 /* USER CODE BEGIN PV */
 //CONTROL DECLARATION
 OdomData_t gOdom;
-
 Pose2D_t     g_pose   = {0};
 ControlCmd_t g_ctrl   = {0};
-Waypoint path[NUM_WP] = {
-    {1.0f, 0.0f},   // 1m straight
-	{1.33f, 0.5f},
-	{1.83f, 1.0f}// then diagonal
-};
-int current_wp = 0;
 
-const uint16_t SERVO_CENTER_PWM = 1589;   // example in µs
-const float    SERVO_K_PWM_PER_RAD = 411.0f / (26.0f * M_PI/180.0f);
-const uint16_t SERVO_MIN_PWM = 1000;
-const uint16_t SERVO_MAX_PWM = 2000;
-int waypoint_state = 0;
+//WAYPOINT DECLARATION
+Waypoint path[NUM_WP] = {
+		{1.2f, 0.0f},
+		{1.81f, 0.68f},
+		{1.2f, 1.5f},
+		{0.0f, 1.5f}
+};
+//Waypoint path[NUM_WP] = {
+//		{1.0f, 0.0f},
+//		{2.01f, 0.0f},
+//		{2.0f, 1.0f}
+//};
+int current_wp = INITIAL_WAYPOINT;
+int waypoint_active = 0;
+
+//SERVO OFFSET CONFIGURATION
+const uint16_t SERVO_CENTER_PWM = SERVO_STATE;
+const uint16_t SERVO_MIN_PWM = SERVO_MIN;
+const uint16_t SERVO_MAX_PWM = SERVO_MAX;
+const float    SERVO_K_PWM_PER_RAD = (SERVO_MAX_PWM-SERVO_STATE) / (26.0f * M_PI/180.0f);
+
 //RTOS QUEUES AND TASK DECLARATION
 QueueHandle_t xCanRxQueue;
 osThreadId_t canRxTaskHandle;
 osThreadId_t actuatorTaskHandle;
 osThreadId_t controlTaskHandle;
+osThreadId_t waypointManagerTaskHandle;
 osThreadId_t debugTaskHandle;
 
 
@@ -104,18 +114,24 @@ const osThreadAttr_t canRxTask_attributes = {
 const osThreadAttr_t actuatorTask_attributes = {
   .name = "actuatorTask",
   .stack_size = 512 * 4,                   // 2 KB of stack
-  .priority = (osPriority_t) osPriorityAboveNormal,
+  .priority = (osPriority_t) osPriorityAboveNormal1,
 };
 const osThreadAttr_t controlTask_attributes = {
   .name = "controlTask",
   .stack_size = 512 * 4,                   // 2 KB of stack
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
-const osThreadAttr_t debugTask_attributes = {
-  .name = "debugTask",
+const osThreadAttr_t waypointTask_attributes = {
+  .name = "waypointManagerTask",
   .stack_size = 512 * 4,                   // 2 KB of stack
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
+const osThreadAttr_t debugTask_attributes = {
+  .name = "debugTask",
+  .stack_size = 512 * 4,                   // 2 KB of stack
+  .priority = (osPriority_t)  osPriorityNormal,
+};
+
 
 /* USER CODE END PV */
 
@@ -134,9 +150,10 @@ void StartDefaultTask(void *argument);
 void CanRxTask(void *argument);
 void ActuatorTask(void *argument);
 void Control_Task(void *argument);
-void update_current_waypoint(float tol);
-float pure_pursuit_compute_delta(Pose2D_t pose, Waypoint path[],int current_wp);
+void WaypointManager_Task(void *argument);
 void Debug_Task(void *argument);
+float pure_pursuit_compute_delta(Pose2D_t pose, Waypoint path[],int current_wp);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -162,30 +179,14 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         }
     }
 
-void update_current_waypoint(float tol)
-{
-    float dx = path[current_wp].x - g_pose.x;
-    float dy = path[current_wp].y - g_pose.y;
-    float dist = sqrtf(dx*dx + dy*dy);
 
-    // If close enough and we have more waypoints,
-    // advance to the next one
-    if (dist < tol && current_wp < (NUM_WP - 1)) {
-    	playTone(melody,durations,melodysize);
-        current_wp++;
-    }
-}
-//13.65
 float pure_pursuit_compute_delta(Pose2D_t pose,
                                  Waypoint path[],
                                  int current_wp)
 {
-    // ---------------------------------------------
-    // 1. Find lookahead point along the path
-    // ---------------------------------------------
+
     Waypoint goal = path[current_wp];
 
-    // default goal: last waypoint
     int last_wp = NUM_WP - 1;
 
     for (int i = current_wp; i <= last_wp; i++) {
@@ -198,9 +199,8 @@ float pure_pursuit_compute_delta(Pose2D_t pose,
             break;
         }
     }
-
     // ---------------------------------------------
-    // 2. Transform goal point into vehicle coordinate frame
+    // Transform goal point into vehicle coordinate frame
     // ---------------------------------------------
     float dx = goal.x - pose.x;
     float dy = goal.y - pose.y;
@@ -214,16 +214,10 @@ float pure_pursuit_compute_delta(Pose2D_t pose,
 
     float Ld = sqrtf(x_cg*x_cg + y_cg*y_cg);
     if (Ld < 0.001f) Ld = 0.001f;
-
-    // ---------------------------------------------
     // 3. Pure Pursuit steering law
     // δ = atan( 2 * L * y / Ld^2 )
-    // ---------------------------------------------
     float delta = atan2f(2.0f * WHEELBASE * y_cg, (Ld * Ld));
-
-    // ---------------------------------------------
-    // 4. Clamp to mechanical limits
-    // ---------------------------------------------
+    //limit to Max steering
     if (delta >  MAX_STEER_ANGLE) delta =  MAX_STEER_ANGLE;
     if (delta < -MAX_STEER_ANGLE) delta = -MAX_STEER_ANGLE;
 
@@ -342,6 +336,7 @@ Error_Handler();
   canRxTaskHandle = osThreadNew(CanRxTask, NULL, &canRxTask_attributes);
   actuatorTaskHandle = osThreadNew(ActuatorTask, NULL, &actuatorTask_attributes);
   controlTaskHandle = osThreadNew(Control_Task, NULL, &controlTask_attributes);
+  waypointManagerTaskHandle = osThreadNew(WaypointManager_Task, NULL, &waypointTask_attributes);
   debugTaskHandle   = osThreadNew(Debug_Task, NULL, &debugTask_attributes);
 
   /* add threads, ... */
@@ -882,124 +877,138 @@ void CanRxTask(void *argument)
 
 void ActuatorTask(void *argument)
 {
-		const float DT = 0.02f;  // 50 Hz
 	    TickType_t last_wake = xTaskGetTickCount();
 	    // speed controller state (PI)
 	    float speed_integral = 0.0f;
+	    TickType_t lastTimeTicks = 0;
+	    const float hz_s = (float)(1.0/ACTUATOR_FREQUENCY);
+	    const TickType_t period = pdMS_TO_TICKS((int)(hz_s*1000));
 
 	    for (;;) {
-	    	vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(20));
-	    	// 1. Snapshot commands and measured velocity
+	    	vTaskDelayUntil(&last_wake, period);
+	    	// Snapshot commands and measured velocity
 	    	float v_cmd   = g_ctrl.v_cmd;
 	    	float delta   = g_ctrl.delta_cmd;
 	    	float v_meas  = gOdom.wheel_v_mps;
 
-	    	// 2. SPEED PID → motor PWM
-	    	float Kp = 0.5f, Ki = 0.001f;
+	    	TickType_t now = xTaskGetTickCount();
+	    	//float DT = (float)(now - lastTimeTicks) / (float)configTICK_RATE_HZ;
+	    	float DT = 0.016f;
+	    	// SPEED PID  motor PWM
+	    	float Kp = KP_CONSTANT, Ki = KI_CONSTANT;
 	    	float error = v_cmd - v_meas;
 	    	speed_integral += error * DT;
 
 	    	float u = Kp * error + Ki * speed_integral;
 
-	    	float base_pwm = (v_cmd > 0.0f) ? 0.3f : 0.0f;
-	    	float pwm = base_pwm + u;   // 0..1
+	    	float base_pwm = (v_cmd > 0.0f) ? MIN_VEL : 0.0f;
+	    	float pwm = base_pwm + u;
 
 	    	if (pwm < 0.0f) pwm = 0.0f;
 	    	if (pwm > 1.0f) pwm = 1.0f;
 
 	    	uint16_t motor_pwm = (uint16_t)(pwm * MAX_VEL);
 
-	    	 // 3. STEERING: δ → servo PWM
-
+	    	 // 3. STEERING: δ servo PWM
 	    	uint16_t steer_pwm = (float)SERVO_CENTER_PWM + SERVO_K_PWM_PER_RAD * delta;
 	    	if (steer_pwm < SERVO_MIN_PWM) steer_pwm = SERVO_MIN_PWM;
 	    	if (steer_pwm > SERVO_MAX_PWM) steer_pwm = SERVO_MAX_PWM;
 
-	         // 4. Apply to hardware
-//	         printf("Motor_pwm = %d steering_pwm = %d \r\n",motor_pwm,steer_pwm);
-	    	 setMotorStep(motor_pwm);
-	    	 setServo(steer_pwm);
+	    	lastTimeTicks = now;
+	    	setMotorStep(motor_pwm);
+	    	setServo(steer_pwm);
 	    }
 	}
 
 void Control_Task(void *argument)
 {
-    const float DT = 0.02f;   // 50 Hz
-    const float WAYPOINT_TOL = 0.03f;
-
     TickType_t last_wake = xTaskGetTickCount();
-
+    TickType_t lastTimeTicks = 0;
+    const float hz_s = (float)(1.0/CONTROL_FREQUENCY);
+    const TickType_t period = pdMS_TO_TICKS((int)(hz_s*1000));
     for (;;) {
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(20));
+        vTaskDelayUntil(&last_wake, period);
 
         // 1. Snapshot sensors
         float v_meas  = gOdom.wheel_v_mps;
         float yaw     = gOdom.yaw_val;
 
         // 2. Update odometry
+        TickType_t now = xTaskGetTickCount();
+//        float DT = (float)(now - lastTimeTicks) / (float)configTICK_RATE_HZ;
+        float DT = 0.016f;
         g_pose.theta = yaw;
         g_pose.x += v_meas * cosf(g_pose.theta) * DT;
         g_pose.y += v_meas * sinf(g_pose.theta) * DT;
 
-
-
-        // 3. Waypoint management
-        //update_current_waypoint(WAYPOINT_TOL);  // same as we wrote before
-
-        	///////////////////////////////////////////////////////////////
-        	float dx = path[current_wp].x - g_pose.x;
-        	float dy = path[current_wp].y - g_pose.y;
-        	float dist = sqrtf(dx*dx + dy*dy);
-
-        	// If close enough and we have more waypoints,
-        	    // advance to the next one
-        	    if (dist < 0.05f && current_wp < (NUM_WP)) {
-        	    	if(current_wp == 2){
-        	    		waypoint_state = 1;
-        	    	}else{
-        	        current_wp++;
-        	    	}
-        	    }
-
-        	//////////////////////////////////////////////////////////////
-      if(!waypoint_state){
-
         // 4. Pure Pursuit for steering
         float delta_cmd = pure_pursuit_compute_delta(g_pose, path, current_wp);
 
+        lastTimeTicks = now;
         // 5. Speed profile
-        float v_cmd = 0.08f; // m/s
+        float v_cmd = STANDARD_VEL; // m/s
         float dx = path[current_wp].x - g_pose.x;
         float dy = path[current_wp].y - g_pose.y;
         float dist = sqrtf(dx*dx + dy*dy);
-        if (dist < 0.3f) v_cmd = 0.2f;
-        if (dist < 0.01f) v_cmd = 0.0f;
 
-        g_ctrl.v_cmd     = v_cmd;
+        if (dist < 0.6f) v_cmd = 0.2f;
+        if (dist < 0.5f) v_cmd = 0.03f;
+
+
+        if(waypoint_active) g_ctrl.v_cmd = v_cmd;
+        else g_ctrl.v_cmd = 0.0;
+
         g_ctrl.delta_cmd = delta_cmd;
-      }
-      else{
-    	  g_ctrl.v_cmd     = 0.0;
-    	  g_ctrl.delta_cmd = 0.0;
-//    	  playTone(melody,durations,melodysize);
-      }
-        // 6. Store commands for Actuator_Task
 
     }
 }
 
+void WaypointManager_Task(void *argument){
+	TickType_t last_wake = xTaskGetTickCount(); // time saved
+	TickType_t lastTimeTicks = 0;
+	const float hz_s = (float)(1.0/WAYPOINT_MANAGER_FREQUENCY);
+	const TickType_t period = pdMS_TO_TICKS((int)(hz_s*1000));
+	int finish_state = 0;
+	for (;;) {
+		vTaskDelayUntil(&last_wake, period); //Execution Hz
+		TickType_t now = xTaskGetTickCount();
+		if(waypoint_active){
+        	float dx = path[current_wp].x - g_pose.x;
+        	float dy = path[current_wp].y - g_pose.y;
+        	float dist = sqrtf(dx*dx + dy*dy);
+        	if (dist < WAYPOINT_TOLERANCE && current_wp < (NUM_WP-1)) {
+        	    current_wp++;
+//        	    waypoint_active = 0;
+//        	    playSingleTone(NOTE_A5,1000);
+//        	    lastTimeTicks = now;
+        	}
+        	else if(dist < WAYPOINT_TOLERANCE && current_wp >= (NUM_WP-1)){
+        		waypoint_active = 0;
+        		finish_state = 1;
+        		playTone(melody,durations,melodysize);
+
+        	}
+		}else{
+			if(!finish_state && (((float)(now - lastTimeTicks) / (float)configTICK_RATE_HZ) >= 2)){
+				waypoint_active = 1;
+			}
+		}
+
+	}
+}
 void Debug_Task(void *argument)
 {
     TickType_t last_wake = xTaskGetTickCount();
+    const float hz_s = (float)(1.0/DEBUG_FREQUENCY);
+    const TickType_t period = pdMS_TO_TICKS((int)(hz_s*1000));
     for (;;) {
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(100)); // 10 Hz
-
-        sendHC("x=%.2f y=%.2f θ=%.2f° v=%.2f v_cmd=%.2f δ=%.1f°\r\n",
+        vTaskDelayUntil(&last_wake, period); //Execution Hz
+        sendHC("x=%.3f y=%.3f θ=%.2f° v=%.2f v_cmd=%.2f δ=%.1f°\r\n",
                g_pose.x, g_pose.y,
                g_pose.theta * 180.0f / M_PI,
 			   gOdom.wheel_v_mps,
                g_ctrl.v_cmd,
-               g_ctrl.delta_cmd * 180.0f / M_PI);
+               g_ctrl.delta_cmd * 180.0f / M_PI); //Bluetooth data send
     }
 }
 /* USER CODE END 4 */

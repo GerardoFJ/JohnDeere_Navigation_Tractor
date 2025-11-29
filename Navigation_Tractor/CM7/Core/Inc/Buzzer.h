@@ -119,6 +119,7 @@ static TIM_HandleTypeDef *current_htim = NULL;
 
 void startBuzzer(TIM_HandleTypeDef *htim);
 void playTone(int *tone, int *duration, int size);
+void playSingleTone(int tone, int duration);
 void noTone(void);
 int presForFrequency(int Frequency);
 

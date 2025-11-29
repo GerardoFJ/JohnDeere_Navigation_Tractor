@@ -36,25 +36,41 @@ typedef struct {
 
 
 //CAN CONSTANTS
-#define ENCODER_CAN_ID      0x20      //Encoder CAN ID
-#define BNO_CAN_ID      0x21      //Encoder CAN ID
+#define ENCODER_CAN_ID      0x20     //Encoder CAN ID
+#define BNO_CAN_ID      	0x21     //Encoder CAN ID
 //PHYSICAL OFFSETS CONSTANTS
-#define INITIAL_STATE 1500
-#define SERVO_STATE 1589
+#define INITIAL_STATE 		1500
+#define SERVO_STATE 		1589
+#define SERVO_MIN			1000
+#define SERVO_MAX 			2000
 //BLUETOOTH CONSTANTS
-#define BUFFER_SIZE 100
+#define BUFFER_SIZE 		100
 //ODOMETRY CONSTANTS
-#define WHEEL_RADIUS_M      0.0314f   // 3.14cm radius
-#define TICKS_PER_REV       142       //TICKS_PER_REV
+#define WHEEL_RADIUS_M      0.0314f  // 3.14cm radius
+#define TICKS_PER_REV       142      //TICKS_PER_REV
 //CONTROL CONSTANTS
-#define MAX_VEL  			500		  //Max vel (0 - 500) valid range
+#define MAX_VEL  			500		 // Max vel (0 - 500) valid range
+#define MIN_VEL				0.3f     //	min movement base pwm min_vel * MAX_VEL
+#define STANDARD_VEL        0.3f     // Standard waypoint follower vel m/s
+#define KP_CONSTANT			0.5f     // kp constant for vel PI control
+#define KI_CONSTANT			0.001f	 // ki constant for vel PI control
 
 
-#define LOOKAHEAD_DIST 0.2f          // meters (tune)
-#define WHEELBASE      0.1365f         // meters (measure your car)
-#define MAX_STEER_ANGLE (26.0f * (M_PI/180.0f))   // rad (±25 degrees)
+#define ACTUATOR_FREQUENCY  60 	     //Actuator Frequency task
+#define CONTROL_FREQUENCY  	60       //Actuator Frequency task
+#define DEBUG_FREQUENCY 	10       //debug Frequency task
+#define WAYPOINT_MANAGER_FREQUENCY 50
 
-#define NUM_WP 3
+
+#define WHEELBASE      		0.1365f   // meters (measure your car)
+#define MAX_STEER_ANGLE 	(26.0f * (M_PI/180.0f))   // rad (±25 degrees)
+
+
+#define INITIAL_WAYPOINT 	0		  // initial waypoint index to follow
+#define NUM_WP 				4		  // number of waypoints declared
+#define WAYPOINT_TOLERANCE  0.17f	  //waypoint distance tolerance (m)
+#define STOP_TIME 			3.0f 	  //Stop delay on each waypoint
+#define LOOKAHEAD_DIST 		0.15f      // meters (tune)
 
 
 

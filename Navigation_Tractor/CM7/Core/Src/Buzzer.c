@@ -43,3 +43,10 @@ void playTone(int *tone, int *duration, int size){
 	}
 	noTone();
 }
+
+void playSingleTone(int tone, int duration){
+		int pres = presForFrequency(tone);
+		__HAL_TIM_SET_PRESCALER(current_htim,pres);
+		osDelay(duration);
+		noTone();
+}
