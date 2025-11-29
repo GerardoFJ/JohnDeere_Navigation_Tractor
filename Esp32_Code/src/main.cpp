@@ -5,7 +5,6 @@
 #define EncoderPin 13
 
 volatile int32_t counter = 0;
-int32_t 
 
 CanSender canSystem;
 
@@ -31,16 +30,18 @@ void setup() {
 void loop() {
   // Send CAN message at regular intervals
   if (counter >= 138) {
-    if((millis() - prevTX) >= invlTX)
-    prevTX = millis();
-    {
-      txData[0] = 0x02;
+    if((millis() - prevTX) >= invlTX) {
+       prevTX = millis();
+
+       txData[0] = (byte)(counter & 0xFF);         // Byte bajo
+       txData[1] = (byte)((counter >> 8) & 0xFF);  // Byte medio-bajo
+       txData[2] = (byte)((counter >> 16) & 0xFF); // Byte medio-alto
+       txData[3] = (byte)((counter >> 24) & 0xFF); // Byte alto
+       
+       // Send CAN message
+       canSystem.send(messageID, 8, txData);
     }
-    canSystem.send(messageID, 8, txData);
-    
-    
   }
   Serial.println(counter);
-  
 }
 //145

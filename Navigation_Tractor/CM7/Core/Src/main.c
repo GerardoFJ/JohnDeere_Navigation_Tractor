@@ -56,6 +56,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+volatile int32_t currentEncoderTicks = 0;
+int32_t startEncoderTicks = 0;
+int32_t targetEncoderTicks = 0;
 
 FDCAN_HandleTypeDef hfdcan1;
 
@@ -95,8 +98,17 @@ void StartDefaultTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/* --- Calibration --- */
+
+#define TICKS_POR_VUELTA_LLANTA  160.0f
+#define DIAMETRO_LLANTA_CM       6.28f
+#define PI_VAL             3.14159265f
+#define PERIMETRO_LLANTA   (DIAMETRO_LLANTA_CM * PI_VAL)
+#define TICKS_PER_CM       (TICKS_POR_VUELTA_LLANTA / PERIMETRO_LLANTA)
+
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
+	// printf("ISR!\r\n");
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
     {
         FDCAN_RxHeaderTypeDef rxHeader;
@@ -107,10 +119,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
             // error handling
             return;
         }
-        if (rxHeader.DataLength > 0){
-                    // 3. Save only the first byte
-                    savedCommandByte = rxData[0];
+        if (rxHeader.DataLength >= 4){
+          currentEncoderTicks = (int32_t)(rxData[0] | (rxData[1] << 8) | (rxData[2] << 16) | (rxData[3] << 24));
+        	uint32_t tempVal = (uint32_t)rxData[0] |
+							   ((uint32_t)rxData[1] << 8) |
+							   ((uint32_t)rxData[2] << 16) |
+							   ((uint32_t)rxData[3] << 24);
 
+          currentEncoderTicks = (int32_t)tempVal;
+          // printf("ISR RAW: %02X %02X %02X %02X -> %ld\r\n",
+          rxData[0], rxData[1], rxData[2], rxData[3], currentEncoderTicks);
          }
     }
 }
@@ -719,25 +737,29 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
   osDelay(1);
   playTone(melody,durations,melodysize);
-  setMotorStep(0);
-  osDelay(200);
-  /* Infinite loop */
-  for(;;)
-  {
-	  setServo(0);
-	  osDelay(3000);
-	  setServo(411);
-	  osDelay(3000);
-	  setServo(206);
-	  osDelay(3000);
-	  setServo(0);
-	  osDelay(3000);
-	  setServo(-589);
-	  osDelay(3000);
-	  setServo(295);
-	  osDelay(3000);
 
-  }
+  // --- MOVEMENT CONFIG ---
+  float distancia_deseada_cm = 100.0f;
+  int32_t ticks_objetivo = (int32_t)(distancia_deseada_cm * TICKS_PER_CM);
+  startEncoderTicks = currentEncoderTicks;
+  targetEncoderTicks = startEncoderTicks + ticks_objetivo;
+
+  for(;;)
+    {
+	  	int32_t error = targetEncoderTicks - currentEncoderTicks;
+
+      if (error > 20)
+      {
+        if (error > (20 * TICKS_PER_CM)) setMotorStep(120);
+        else setMotorStep(80);
+      }
+      else
+      {
+        setMotorStep(0);
+      }
+
+		  osDelay(20);
+    }
   /* USER CODE END 5 */
 }
 
