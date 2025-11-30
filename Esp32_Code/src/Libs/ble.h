@@ -11,7 +11,7 @@
 class MyClientCallback;
 class MyAdvertisedDeviceCallbacks;
 
-class BleModule{
+class BleModule{ //Bluetooth Class
     friend class MyClientCallback;
     friend class MyAdvertisedDeviceCallbacks;
 
@@ -27,14 +27,14 @@ class BleModule{
         static uint16_t offsetX;
         static uint16_t offsetY;
         static uint16_t offsetAngle;
-        
+        //Internal functions
         static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic,uint8_t* pData,size_t length,bool isNotify);
         bool connectToServer(BLEAddress pAddress);
 
     public:
-        BleModule(byte *CameraData);
-        bool begin();
-        bool status();
+        BleModule(byte *CameraData); // Object constructor
+        bool begin(); // Initialization
+        bool status(); //Status update
 
 
 };

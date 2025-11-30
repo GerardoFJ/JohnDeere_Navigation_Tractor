@@ -14,7 +14,7 @@ const unsigned int invlTX = 20;
 
 //CAN DEFINITIONS
 CanSender canSystem;
-byte EncoderData[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // Data to send
+byte EncoderData[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // Data initialization
 byte BnoData[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 byte CameraData[]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
@@ -33,8 +33,8 @@ void setup() {
   pinMode(EncoderPin, INPUT); //Encoder initialization
   attachInterrupt(EncoderPin, encoderISR, RISING); // Interrupt initialization
   if (canSystem.begin()) Serial.println("Can Activated!"); //Activate can
-  if (bnoSensor.begin()) Serial.println("Bno Activated");
-  if (bluetooth.begin()) Serial.println("Bluetooth activated");
+  if (bnoSensor.begin()) Serial.println("Bno Activated"); // Activate Bno
+  if (bluetooth.begin()) Serial.println("Bluetooth activated"); //Activate bluetooth
   prevTX = millis(); // Initialize clock
 }
 void loop() {
@@ -56,7 +56,7 @@ void loop() {
        prevTX = millis();  
        canSystem.send((unsigned long)EncoderID, 8, EncoderData); // Send every 20 ms (50hz) can frame encoder message
        canSystem.send((unsigned long)BnoID, 8, BnoData);
-       if(bluetooth.status()){
+       if(bluetooth.status()){ //Check camera status 
         canSystem.send((unsigned long)BluetoothID, 8, CameraData);
        } 
        }

@@ -99,17 +99,6 @@ void BleModule::notifyCallback(
         }
         Serial.println();
       }
-
-      // If you want to also store relative values into CameraData instead of raw:
-      // (example: pack as 3 * int16_t, big-endian)
-      /*
-      CameraData[0] = (uint8_t)(x_rel >> 8);
-      CameraData[1] = (uint8_t)(x_rel & 0xFF);
-      CameraData[2] = (uint8_t)(y_rel >> 8);
-      CameraData[3] = (uint8_t)(y_rel & 0xFF);
-      CameraData[4] = (uint8_t)(ang_rel >> 8);
-      CameraData[5] = (uint8_t)(ang_rel & 0xFF);
-      */
   }
 }
 
@@ -140,7 +129,7 @@ bool BleModule::connectToServer(BLEAddress pAddress) {
 bool BleModule::status(){
     if (doConnect == true) {
         if (connectToServer(*pServerAddress)) {
-            Serial.println("We are now connected to the Camera!");
+            Serial.println("We are now connected to the Camera!"); 
         } else {
             Serial.println("Failed to connect.");
         }
