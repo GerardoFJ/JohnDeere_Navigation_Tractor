@@ -2,6 +2,7 @@
 #include "Libs/CanSender.h"
 #include "Constants.h"
 #include "Libs/BnoWrap.h"
+#include "Libs/ble.h"
 
 //Encoder and sending definitions
 volatile int32_t counter = 0;
@@ -15,10 +16,12 @@ const unsigned int invlTX = 20;
 CanSender canSystem;
 byte EncoderData[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // Data to send
 byte BnoData[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
+byte CameraData[]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 //BNO DEFINITIONS
 BnoWrapper bnoSensor;
+BleModule bluetooth(CameraData);
+
 
 //INTERRUPT FUNCTION FOR ENCODER
 void ARDUINO_ISR_ATTR encoderISR() {
@@ -31,10 +34,10 @@ void setup() {
   attachInterrupt(EncoderPin, encoderISR, RISING); // Interrupt initialization
   if (canSystem.begin()) Serial.println("Can Activated!"); //Activate can
   if (bnoSensor.begin()) Serial.println("Bno Activated");
+  if (bluetooth.begin()) Serial.println("Bluetooth activated");
   prevTX = millis(); // Initialize clock
 }
 void loop() {
-      
        if(counter != last_counter){ //check counter update
        EncoderData[0] = (byte)(counter & 0xFF); 
        EncoderData[1] = (byte)((counter >> 8) & 0xFF);  
@@ -53,5 +56,8 @@ void loop() {
        prevTX = millis();  
        canSystem.send((unsigned long)EncoderID, 8, EncoderData); // Send every 20 ms (50hz) can frame encoder message
        canSystem.send((unsigned long)BnoID, 8, BnoData);
+       if(bluetooth.status()){
+        canSystem.send((unsigned long)BluetoothID, 8, CameraData);
+       } 
        }
 }

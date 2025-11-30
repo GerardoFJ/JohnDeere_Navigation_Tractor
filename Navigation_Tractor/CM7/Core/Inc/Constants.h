@@ -25,6 +25,13 @@ typedef struct {
 } Pose2D_t;
 
 typedef struct {
+    float x;
+    float y;
+    float angle;
+    int active;
+} Pose2D_Camera;
+
+typedef struct {
     float v_cmd;      // m/s
     float delta_cmd;  // rad
 } ControlCmd_t;
@@ -38,6 +45,7 @@ typedef struct {
 //CAN CONSTANTS
 #define ENCODER_CAN_ID      0x20     //Encoder CAN ID
 #define BNO_CAN_ID      	0x21     //Encoder CAN ID
+#define CAMERA_CAN_ID      	0x22     //Encoder CAN ID
 //PHYSICAL OFFSETS CONSTANTS
 #define INITIAL_STATE 		1500
 #define SERVO_STATE 		1589

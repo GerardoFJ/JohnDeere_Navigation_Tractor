@@ -7,6 +7,12 @@
 #define EncoderPin 13
 #define EncoderID 0x20
 #define BnoID 0x21
+#define BluetoothID 0x22
+
+//ble Settings
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define DEBUGGING true
 
 namespace SystemConfig {
 

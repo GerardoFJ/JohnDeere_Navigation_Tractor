@@ -73,14 +73,15 @@ UART_HandleTypeDef huart3;
 //CONTROL DECLARATION
 OdomData_t gOdom;
 Pose2D_t     g_pose   = {0};
+Pose2D_Camera    cam_pose   = {0};
 ControlCmd_t g_ctrl   = {0};
 
 //WAYPOINT DECLARATION
 Waypoint path[NUM_WP] = {
-		{1.2f, 0.0f},
-		{1.81f, 0.68f},
-		{1.2f, 1.5f},
-		{0.0f, 1.5f}
+		{0.7f, -0.13f},
+		{0.44f, 0.67f},
+		{1.50f, 0.26f},
+		{0.0f,0.0f}
 };
 //Waypoint path[NUM_WP] = {
 //		{1.0f, 0.0f},
@@ -870,6 +871,31 @@ void CanRxTask(void *argument)
             	// Read it back as a float automatically
             	gOdom.yaw_val = converter.float_val;
             }
+            if (frame.id == CAMERA_CAN_ID){
+            	if(frame.data[6] == 0xFF){
+            		cam_pose.active = 0;
+            	}else{
+            	cam_pose.active = 1;
+            	    int16_t x_rel = (int16_t)(
+            	        ((int16_t)frame.data[0] << 8) |
+            	        ((int16_t)frame.data[1] << 0)
+            	    );
+
+            	    int16_t y_rel = (int16_t)(
+            	        ((int16_t)frame.data[2] << 8) |
+            	        ((int16_t)frame.data[3] << 0)
+            	    );
+
+            	    int16_t angle_rel = (int16_t)(
+            	        ((int16_t)frame.data[4] << 8) |
+            	        ((int16_t)frame.data[5] << 0)
+            	    );
+
+            	    cam_pose.x     = (float)x_rel;
+            	    cam_pose.y     = (float)y_rel;
+            	    cam_pose.angle = (float)angle_rel;
+            	}
+             }
 
         }
     }
@@ -937,9 +963,17 @@ void Control_Task(void *argument)
         TickType_t now = xTaskGetTickCount();
 //        float DT = (float)(now - lastTimeTicks) / (float)configTICK_RATE_HZ;
         float DT = 0.016f;
-        g_pose.theta = yaw;
-        g_pose.x += v_meas * cosf(g_pose.theta) * DT;
-        g_pose.y += v_meas * sinf(g_pose.theta) * DT;
+        if(cam_pose.active){
+        	g_pose.theta = yaw;
+        	g_pose.x = cam_pose.x/100;
+        	g_pose.y = -1 * (cam_pose.y/100);
+//        	printf("x=%.3f y=%.3f θ=%.2f \r\n",g_pose.x,g_pose.y,g_pose.theta);
+        }else{
+        	g_pose.theta = yaw;
+        	g_pose.x += v_meas * cosf(g_pose.theta) * DT;
+        	g_pose.y += v_meas * sinf(g_pose.theta) * DT;
+        }
+
 
         // 4. Pure Pursuit for steering
         float delta_cmd = pure_pursuit_compute_delta(g_pose, path, current_wp);
@@ -978,9 +1012,9 @@ void WaypointManager_Task(void *argument){
         	float dist = sqrtf(dx*dx + dy*dy);
         	if (dist < WAYPOINT_TOLERANCE && current_wp < (NUM_WP-1)) {
         	    current_wp++;
-//        	    waypoint_active = 0;
-//        	    playSingleTone(NOTE_A5,1000);
-//        	    lastTimeTicks = now;
+        	    waypoint_active = 0;
+        	    playSingleTone(NOTE_A5,1000);
+        	    lastTimeTicks = now;
         	}
         	else if(dist < WAYPOINT_TOLERANCE && current_wp >= (NUM_WP-1)){
         		waypoint_active = 0;
