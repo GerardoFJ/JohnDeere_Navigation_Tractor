@@ -19,16 +19,16 @@ typedef union {
 } FloatConverter;
 
 typedef struct {
-    float x;
-    float y;
-    float theta;
+    float x;		//m
+    float y;		//m
+    float theta;	//rad
 } Pose2D_t;
 
 typedef struct {
-    float x;
-    float y;
-    float angle;
-    int active;
+    float x;		//m
+    float y;		//m
+    float angle;	//m
+    int active;		//active message
 } Pose2D_Camera;
 
 typedef struct {
@@ -37,8 +37,8 @@ typedef struct {
 } ControlCmd_t;
 
 typedef struct {
-    float x;
-    float y;
+    float x;		//m
+    float y;		//m
 } Waypoint;
 
 
@@ -51,6 +51,8 @@ typedef struct {
 #define SERVO_STATE 		1589
 #define SERVO_MIN			1000
 #define SERVO_MAX 			2000
+#define WHEELBASE      		0.1365f   // meters (measure your car)
+#define MAX_STEER_ANGLE 	(26.0f * (M_PI/180.0f))   // rad (±25 degrees)
 //BLUETOOTH CONSTANTS
 #define BUFFER_SIZE 		100
 //ODOMETRY CONSTANTS
@@ -62,18 +64,12 @@ typedef struct {
 #define STANDARD_VEL        0.3f     // Standard waypoint follower vel m/s
 #define KP_CONSTANT			0.5f     // kp constant for vel PI control
 #define KI_CONSTANT			0.001f	 // ki constant for vel PI control
-
-
+//Task frequency constants
 #define ACTUATOR_FREQUENCY  60 	     //Actuator Frequency task
 #define CONTROL_FREQUENCY  	60       //Actuator Frequency task
 #define DEBUG_FREQUENCY 	10       //debug Frequency task
 #define WAYPOINT_MANAGER_FREQUENCY 50
-
-
-#define WHEELBASE      		0.1365f   // meters (measure your car)
-#define MAX_STEER_ANGLE 	(26.0f * (M_PI/180.0f))   // rad (±25 degrees)
-
-
+//WAYPOINT MANAGER CONSTANTS
 #define INITIAL_WAYPOINT 	0		  // initial waypoint index to follow
 #define NUM_WP 				4		  // number of waypoints declared
 #define WAYPOINT_TOLERANCE  0.17f	  //waypoint distance tolerance (m)
