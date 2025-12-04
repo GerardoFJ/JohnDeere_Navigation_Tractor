@@ -10,7 +10,7 @@ volatile int32_t last_counter = 0;
 volatile float yaw_val = 0;
 volatile float yaw_val_prev = 0;
 unsigned long prevTX = 0;
-const unsigned int invlTX = 20;
+const unsigned int invlTX = 16;
 
 //CAN DEFINITIONS
 CanSender canSystem;
@@ -21,6 +21,20 @@ byte CameraData[]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 //BNO DEFINITIONS
 BnoWrapper bnoSensor;
 BleModule bluetooth(CameraData);
+
+// Bluetooth status shared between cores (volatile for thread safety)
+volatile bool bluetoothConnected = false;
+
+// Task handle for Bluetooth task on Core 0
+TaskHandle_t bluetoothTaskHandle = NULL;
+
+// Bluetooth task running on Core 0
+void bluetoothTask(void *parameter) {
+  for (;;) {
+    bluetoothConnected = bluetooth.status();
+    vTaskDelay(pdMS_TO_TICKS(20)); // Check every 100ms to avoid blocking
+  }
+}
 
 
 //INTERRUPT FUNCTION FOR ENCODER
@@ -35,6 +49,18 @@ void setup() {
   if (canSystem.begin()) Serial.println("Can Activated!"); //Activate can
   if (bnoSensor.begin()) Serial.println("Bno Activated"); // Activate Bno
   if (bluetooth.begin()) Serial.println("Bluetooth activated"); //Activate bluetooth
+  
+  // Create Bluetooth task on Core 0 (Arduino loop runs on Core 1)
+  xTaskCreatePinnedToCore(
+    bluetoothTask,         // Task function
+    "BluetoothTask",       // Task name
+    4096,                  // Stack size (bytes)
+    NULL,                  // Task parameters
+    1,                     // Priority (1 = low priority)
+    &bluetoothTaskHandle,  // Task handle
+    0                      // Core 0 (Arduino runs on Core 1)
+  );
+  
   prevTX = millis(); // Initialize clock
 }
 void loop() {
@@ -56,7 +82,7 @@ void loop() {
        prevTX = millis();  
        canSystem.send((unsigned long)EncoderID, 8, EncoderData); // Send every 20 ms (50hz) can frame encoder message
        canSystem.send((unsigned long)BnoID, 8, BnoData);
-       if(bluetooth.status()){ //Check camera status 
+       if(bluetoothConnected){ //Check camera status (updated by Core 0 task)
         canSystem.send((unsigned long)BluetoothID, 8, CameraData);
        } 
        }

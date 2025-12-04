@@ -73,6 +73,7 @@ UART_HandleTypeDef huart3;
 //CONTROL DECLARATION
 OdomData_t gOdom;
 Pose2D_t     g_pose   = {0};
+Pose2D_t     odom_pose   = {0};
 Pose2D_Camera    cam_pose   = {0};
 ControlCmd_t g_ctrl   = {0};
 
@@ -81,7 +82,7 @@ Waypoint path[NUM_WP] = {
 		{0.7f, -0.13f},
 		{0.44f, 0.67f},
 		{1.50f, 0.26f},
-		{0.0f,0.0f}
+		{1.50f,0.8f}
 };
 
 int current_wp = INITIAL_WAYPOINT;
@@ -827,7 +828,6 @@ void CanRxTask(void *argument)
         if (xQueueReceive(xCanRxQueue, &frame, portMAX_DELAY) == pdTRUE) {
             // Check for encoder ID
             if (frame.id == ENCODER_CAN_ID) {
-
             	int32_t ticks =  //reconstruct encoder message
             	   ((int32_t)frame.data[0] << 0)
             	   | ((int32_t)frame.data[1] << 8)
@@ -953,18 +953,21 @@ void Control_Task(void *argument)
         // Snapshot sensors
         float v_meas  = gOdom.wheel_v_mps;
         float yaw     = gOdom.yaw_val;
-
+//        printf("%.2f \r\n",v_meas);
         //Update odometry
         TickType_t now = xTaskGetTickCount();
         float DT = (float)(now - lastTimeTicks) / (float)configTICK_RATE_HZ;
+        odom_pose.theta = yaw;
+        odom_pose.x += v_meas * cosf(g_pose.theta) * DT;
+        odom_pose.y += v_meas * sinf(g_pose.theta) * DT;
         if(cam_pose.active){ //Prioritize the camera pose
-        	g_pose.theta = yaw;
+        	g_pose.theta = odom_pose.theta;
         	g_pose.x = cam_pose.x/100;
         	g_pose.y = -1 * (cam_pose.y/100);
         }else{ //change to odometry position on unavailable camera pose
-        	g_pose.theta = yaw;
-        	g_pose.x += v_meas * cosf(g_pose.theta) * DT;
-        	g_pose.y += v_meas * sinf(g_pose.theta) * DT;
+        	g_pose.x = odom_pose.x;
+        	g_pose.y = odom_pose.y;
+        	g_pose.theta = odom_pose.theta;
         }
 
 
